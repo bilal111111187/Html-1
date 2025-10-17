@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Araba Oyunu - Helikopter Takibi</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js CDN (3D Grafik Motoru) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tone.js CDN (Motor Sesi, Müzik ve Siren için) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;800&display=swap" rel="stylesheet">
+    <style>
+        /* TAM EKRAN VE MOBİL UYUM */
+        body {
+            margin: 0;
+            overflow: hidden; 
+            background-color: #f3f4f6;
+            font-family: 'Inter', sans-serif;
+            width: 100vw;
+            height: 100vh;
+        }
+        #game-container {
+            position: absolute; 
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            max-width: none; 
+            margin: 0; 
+            border-radius: 0; 
+            box-shadow: none; 
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Mobil Kontroller için Stil */
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 10px;
+            pointer-events: none; 
+            z-index: 10;
+        }
+        .control-group {
+            display: flex;
+            gap: 15px;
+        }
+        .control-button {
+            pointer-events: auto; 
+            width: 80px; 
+            height: 80px;
+            background-color: rgba(0, 0, 0, 0.6); 
+            color: #fff; 
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            font-weight: 800;
+            user-select: none;
+            cursor: pointer;
+            transition: background-color 0.1s, transform 0.1s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            text-transform: uppercase;
+        }
+        .control-button:active {
+            background-color: #fca5a5; 
+            transform: scale(0.9);
+            color: #1f2937;
+        }
+
+        /* Bilgi Ekranı */
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fca5a5; 
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            z-index: 10;
+            min-width: 180px;
+            text-align: left; 
+        }
+        
+        /* Mesafeye göre renklenen uyarı */
+        #police-distance {
+            font-weight: 800;
+            transition: color 0.3s;
+        }
+
+        /* Çarpışma Mesajı için Stil */
+        #collision-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #dc2626; 
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 2rem;
+            font-weight: 800;
+            z-index: 20;
+            display: none; 
+            border: 3px solid #dc2626;
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.5);
+        }
+        /* Ses Başlatma Butonu */
+        #start-audio-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            cursor: pointer;
+            background-color: #10b981;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            z-index: 30;
+            box-shadow: 0 6px #059669;
+            transition: all 0.1s;
+        }
+        #start-audio-btn:active {
+            box-shadow: 0 2px #059669;
+            transform: translate(-50%, -50%) translateY(4px);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <button id="start-audio-btn">OYUNA BAŞLA (Ses ve Müzik Aktif)</button>
+    <!-- Hız, Mesafe ve Polis Takibi burada gösterilecek -->
+    <div id="info">Hız: 0 km/s <br> Mesafe: 0.00 km <br> Polis: <span id="police-distance">Uzak</span></div> 
+    <div id="collision-message">POLİS SANA YETİŞTİ! YAKALANDIN!</div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Mobil Kontroller -->
+    <div id="controls">
+        <div class="control-group flex-col">
+            <div id="btn-up" class="control-button">HIZLAN</div>
+            <div id="btn-down" class="control-button">FREN</div>
+        </div>
+
+        <div class="control-group">
+            <div id="btn-left" class="control-button">SOL</div>
+            <div id="btn-right" class="control-button">SAĞ</div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+
+<script type="module">
+    // =======================================================================
+    // SES MOTORU (TONE.JS)
+    // =======================================================================
+    let motorSynth;
+    let backgroundMusic; 
+    let collisionSynth;
+    let sirenSynth; 
+    let sirenLoop;  
+    let motorRunning = false;
+    let isAudioInitialized = false;
+    
+    let lightTimer = 0; 
+    let rotorSpeed = 0; // Helikopter pervanesi hızı
+
+    /**
+     * Ses altyapısını kurar (Motor, Çarpışma, Müzik, Siren).
+     */
+    function setupAudio() {
+        if (isAudioInitialized) return;
+        
+        try {
+            // Motor Sesi
+            motorSynth = new Tone.MonoSynth({
+                frequency: "C2",
+                volume: -18,
+                oscillator: { type: "sawtooth" },
+                filter: { type: "lowpass", frequency: 1500, rolloff: -24 },
+                envelope: { attack: 0.3, decay: 0.5, sustain: 0.6, release: 0.5 },
+                filterEnvelope: {
+                    attack: 0.001,
+                    decay: 0.5,
+                    sustain: 0.9,
+                    release: 0.5,
+                    baseFrequency: 500,
+                    octaves: 3
+                }
+            }).toDestination();
+            
+            // Çarpışma Sesi
+            collisionSynth = new Tone.NoiseSynth({
+                noise: { type: "brown" }, 
+                envelope: {
+                    attack: 0.005,
+                    decay: 0.3, 
+                    sustain: 0,
+                    release: 0.1
+                },
+                volume: -6 
+            }).chain(new Tone.Filter(300, "lowpass"), Tone.Destination); 
+            
+            setupMusic();
+            setupSiren();
+
+            isAudioInitialized = true;
+        } catch(e) {
+            console.error("Tone.js başlatma hatası:", e);
+        }
+    }
+
+    /**
+     * Polis siren sesini kurar.
+     */
+    function setupSiren() {
+        // Siren: Kare dalga (square) sert bir ses verir
+        sirenSynth = new Tone.Synth({
+            oscillator: { type: "square" }, 
+            envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.1 },
+            volume: -Infinity 
+        }).toDestination();
+        
+        // Siren döngüsü: İki nota arasında hızlı geçiş yapar
+        sirenLoop = new Tone.Loop(time => {
+            if (sirenSynth.volume.value > -100) { 
+                sirenSynth.triggerAttackRelease("A4", "8n", time); 
+                sirenSynth.triggerAttackRelease("C5", "8n", time + Tone.Transport.toSeconds("8n")); 
+            }
+        }, "4n").start(0); 
+    }
+    
+    /**
+     * Mesafeye göre siren sesini dinamik olarak günceller.
+     * @param {number} distance Oyuncu ve polis arasındaki mesafe.
+     */
+    function updateSiren(distance) {
+        if (!sirenSynth || !isAudioInitialized) return;
+
+        const maxVolumeDistance = 20; 
+        const maxDistToShow = 60; 
+        
+        const normalizedDistance = Math.min(1, distance / maxVolumeDistance);
+        
+        // Ses seviyesi: -6 (yakın) ile -16 (uzak) arasında
+        const volume = (1 - normalizedDistance) * 10 - 16; 
+        
+        if (distance < maxDistToShow) {
+             // Ses seviyesini pürüzsüzce ayarla
+             sirenSynth.volume.value = Math.max(-Infinity, volume);
+        } else {
+             sirenSynth.volume.value = -Infinity; 
+        }
+
+        // HUD üzerindeki mesafeyi güncelle
+        const distSpan = document.getElementById('police-distance');
+        const distText = distance.toFixed(1) + " m";
+
+        if (distance < 10) {
+            distSpan.textContent = `ÇOK YAKIN! (${distText})`;
+            distSpan.style.color = '#dc2626'; // Kırmızı
+        } else if (distance < 30) {
+            distSpan.textContent = `Takipte (${distText})`;
+            distSpan.style.color = '#facc15'; // Sarı
+        } else if (distance < 60) {
+            distSpan.textContent = `Uzaklaşıyor (${distText})`;
+            distSpan.style.color = '#34d399'; // Yeşil
+        } else {
+            distSpan.textContent = `Uzak (${distText})`;
+            distSpan.style.color = '#9ca3af'; // Gri
+        }
+    }
+
+    /**
+     * Yüksek sesli, Tokyo Drift temalı elektronik müzik sekansı oluşturur.
+     */
+    function setupMusic() {
+        const musicVolume = new Tone.Volume(-5).toDestination();
+        backgroundMusic = musicVolume; 
+
+        // 1. Driving Bassline (Agresif Synth)
+        const bassSynth = new Tone.MonoSynth({
+            volume: -10,
+            oscillator: { type: "sawtooth" },
+            filter: { type: "lowpass", frequency: 500, rolloff: -24 },
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.5 },
+        }).connect(musicVolume);
+
+        // 2. Kick Drum (Sert, Derin)
+        const kickSynth = new Tone.MembraneSynth({
+            pitchDecay: 0.05,
+            octaves: 10,
+            envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
+            volume: 0 
+        }).connect(musicVolume);
+
+        // 3. Hi-Hat (Keskin, Hızlı)
+        const hatSynth = new Tone.NoiseSynth({
+            noise: { type: "white" },
+            envelope: { attack: 0.001, decay: 0.1, sustain: 0 },
+            volume: -10
+        }).connect(musicVolume);
+
+        // --- SEQUENCER ---
+        Tone.Transport.bpm.value = 140; 
+
+        // Kick Pattern (4/4 Ritim)
+        new Tone.Loop(time => {
+            kickSynth.triggerAttackRelease("C1", "8n", time);
+        }, "4n").start(0);
+
+        // Hi-Hat Pattern (1/8 Ritim)
+        new Tone.Loop(time => {
+            hatSynth.triggerAttackRelease("16n", time);
+        }, "8n").start("8n");
+
+        // Bas Dizisi (Tekrarlayan Hızlı Motif)
+        new Tone.Sequence((time, note) => {
+            bassSynth.triggerAttackRelease(note, "4n", time);
+        }, ["C2", "G1", "A#1", "F1"], "1m").start(0); 
+
+        // Başlangıçta sessiz yap
+        musicVolume.mute = true;
+    }
+
+    /**
+     * Hıza göre motor sesini dinamik olarak günceller.
+     */
+    function updateMotorSound(hiz) {
+        if (!motorSynth || !isAudioInitialized) return;
+
+        const absHiz = Math.abs(hiz);
+        
+        if (absHiz > 0.005) {
+            if (!motorRunning) {
+                motorSynth.triggerAttack("C2"); 
+                motorRunning = true;
+            }
+
+            const normalizedSpeed = absHiz / Oyun.maksHiz;
+            
+            const minFreq = 65; 
+            const maxFreq = 196; 
+            const freq = minFreq + (maxFreq - minFreq) * normalizedSpeed;
+            
+            const filterOctaves = 1 + normalizedSpeed * 2;
+
+            motorSynth.set({ 
+                frequency: freq,
+                filterEnvelope: { octaves: filterOctaves }
+            });
+            
+        } else if (motorRunning && absHiz < 0.005) {
+             motorSynth.triggerRelease();
+             motorRunning = false;
+        }
+    }
+
+    /**
+     * Çarpışma olduğunda ses çıkarır.
+     */
+    function playCollisionSound() {
+        if (isAudioInitialized && collisionSynth) {
+            collisionSynth.triggerAttackRelease(0.3);
+        }
+    }
+
+
+    // =======================================================================
+    // THREE.JS KURULUMU VE OYUN MANTIĞI
+    // =======================================================================
+    
+    const canvas = document.getElementById('gameCanvas');
+    const infoDisplay = document.getElementById('info');
+    const collisionMessage = document.getElementById('collision-message');
+
+    let scene, camera, renderer;
+    let car, policeCar, ground, kerbLeft, kerbRight; 
+    let helicopter, spotlight, mainRotor, tailRotor; // Helikopter Değişkenleri
+    
+    const YOL_BOYUTU = 200; 
+    const CAR_RADIUS = 1.0; 
+    const ROAD_WIDTH = 12; 
+    
+    let totalDistance = 0; 
+
+    const obstacles = [];
+    const environmentDetails = []; 
+    
+    let smokeMeshes = [];
+    const NUM_SMOKE_MESHS = 40; 
+
+    // Oyun Durumu ve Fizik Parametreleri
+    const Oyun = {
+        hiz: 0,
+        ivme: 0.0045,              
+        frenGucu: 0.012,          
+        surtunme: 0.0006,         
+        maksHiz: 0.7,             
+        maksGeriHiz: -0.25,       
+        donusHizi: 0.03,          
+        aci: 0,
+        yonTusuBasili: {          
+            up: false,
+            down: false,
+            left: false,
+            right: false
+        },
+        sonZaman: performance.now()
+    };
+    
+    // Kamera Takip Parametreleri
+    const CameraParams = {
+        distance: 5.5, // Arabaya olan yatay uzaklık
+        height: 2.5,   // Yükseklik
+        lookAheadFactor: 3.5 // Ne kadar ileri bakılacağı
+    };
+
+    /**
+     * Three.js sahnesini ve temel objeleri kurar.
+     */
+    function sahneyiKur() {
+        // Sahne
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb); 
+        scene.fog = new THREE.Fog(0xadd8e6, 1, YOL_BOYUTU * 3);
+
+        // Kamera
+        const aspect = window.innerWidth / window.innerHeight;
+        camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000); 
+
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // Gölge haritalarını etkinleştir
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Işıklandırma
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.5); 
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5); 
+        directionalLight.position.set(30, 40, 20);
+        directionalLight.target.position.set(0, 0, 0);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 1024;
+        directionalLight.shadow.mapSize.height = 1024;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 100;
+        directionalLight.shadow.camera.left = -50;
+        directionalLight.shadow.camera.right = 50;
+        directionalLight.shadow.camera.top = 50;
+        directionalLight.shadow.camera.bottom = -50;
+        scene.add(directionalLight);
+        scene.add(directionalLight.target);
+
+        // Objeleri Yarat
+        ground = createGround();
+        scene.add(ground);
+        
+        car = createCar(0xf87171, false); 
+        scene.add(car);
+        
+        createKerbs();
+        scene.add(kerbLeft);
+        scene.add(kerbRight);
+        
+        createObstacles();
+        obstacles.forEach(obs => scene.add(obs));
+
+        createCityBuildings(); 
+        environmentDetails.forEach(detail => scene.add(detail));
+        
+        createPoliceCar(); // POLİS ARACINI YARAT
+        createHelicopter(); // POLİS HELİKOPTERİNİ YARAT
+        createSmokeMeshes();
+        
+        window.addEventListener('resize', boyutAyarlayıcı);
+        boyutAyarlayıcı();
+    }
+
+    /**
+     * Tekerlekli bir araba modeli oluşturur.
+     */
+    function createCar(color, isPolice = false) {
+        const carGroup = new THREE.Group();
+        const mainColor = color; 
+
+        // Gövde
+        const bodyGeometry = new THREE.BoxGeometry(1.5, 0.6, 3);
+        const bodyMaterial = new THREE.MeshPhongMaterial({ color: mainColor, specular: 0x888888, shininess: 200 });
+        const carBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        carBody.position.y = 0.3; 
+        carBody.castShadow = true;
+        carBody.receiveShadow = false;
+        carGroup.add(carBody);
+
+        // Kabin
+        const cabinGeometry = new THREE.BoxGeometry(1.2, 0.4, 1.5);
+        const cabinColor = isPolice ? 0x444444 : 0xcccccc;
+        const cabinMaterial = new THREE.MeshPhongMaterial({ color: cabinColor, transparent: true, opacity: 0.8 }); 
+        const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+        cabin.position.y = 0.7;
+        cabin.position.z = 0.2;
+        cabin.castShadow = true;
+        carGroup.add(cabin);
+
+        // Tekerlekler
+        const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 10);
+        const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+        
+        const wheelPositions = [
+            { x: 0.8, z: 1.2 }, { x: -0.8, z: 1.2 }, 
+            { x: 0.8, z: -1.2 }, { x: -0.8, z: -1.2 } 
+        ];
+
+        wheelPositions.forEach(pos => {
+            const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            wheel.rotation.x = Math.PI / 2; 
+            wheel.position.set(pos.x, 0, pos.z);
+            carGroup.add(wheel);
+        });
+        
+        // POLİS IŞIKLARI
+        if (isPolice) {
+            const lightGroup = new THREE.Group();
+            
+            // Kırmızı Lamba (sol)
+            const redLight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+            redLight.position.set(-0.3, 1.0, 0.7);
+            redLight.userData.color = 'red';
+            lightGroup.add(redLight);
+
+            // Mavi Lamba (sağ)
+            const blueLight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.2), new THREE.MeshBasicMaterial({ color: 0x0000ff }));
+            blueLight.position.set(0.3, 1.0, 0.7);
+            blueLight.userData.color = 'blue';
+            lightGroup.add(blueLight);
+
+            carGroup.add(lightGroup);
+            carGroup.userData.lights = lightGroup.children; 
+        }
+
+        carGroup.position.y = -0.2; 
+        return carGroup;
+    }
+    
+    /**
+     * Polis aracını oluşturur ve başlangıç konumunu ayarlar.
+     */
+    function createPoliceCar() {
+        // Polis: Koyu Gri/Siyah (0x1f2937)
+        policeCar = createCar(0x1f2937, true);
+        
+        // Oyuncunun hemen gerisinde (Z ekseninde negatif) başlat
+        const startX = (Math.random() - 0.5) * 5; 
+        const startZ = -25 - Math.random() * 10; 
+        
+        policeCar.position.set(startX, -0.2, startZ);
+        
+        // Hız ve Yapay Zeka Ayarları
+        policeCar.userData.speed = 0.0;
+        policeCar.userData.maxChaseSpeed = 0.85; 
+        policeCar.userData.acceleration = 0.004; 
+        policeCar.userData.turnRate = 0.08; 
+        policeCar.userData.isPolice = true;
+
+        scene.add(policeCar);
+    }
+    
+    /**
+     * Polis helikopterini ve kırmızı spot ışığını oluşturur.
+     */
+    function createHelicopter() {
+        const heliGroup = new THREE.Group();
+
+        // 1. Ana Gövde (Body)
+        const bodyGeo = new THREE.CylinderGeometry(1.5, 1.5, 5, 8);
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0x1e40af }); // Koyu Mavi/Lacivert
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.rotation.x = Math.PI / 2;
+        body.castShadow = true;
+        heliGroup.add(body);
+
+        // 2. Ana Pervane (Main Rotor)
+        const rotorGeo = new THREE.BoxGeometry(0.2, 10, 0.05); 
+        const rotorMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+        mainRotor = new THREE.Mesh(rotorGeo, rotorMat);
+        mainRotor.rotation.z = Math.PI / 2;
+        mainRotor.position.y = 2.6; // Gövdenin üstünde
+        mainRotor.receiveShadow = false;
+        mainRotor.castShadow = false;
+        heliGroup.add(mainRotor);
+        
+        // 3. Kuyruk (Tail Boom)
+        const tailGeo = new THREE.BoxGeometry(0.5, 0.5, 6);
+        const tailMat = new THREE.MeshPhongMaterial({ color: 0x1e40af });
+        const tail = new THREE.Mesh(tailGeo, tailMat);
+        tail.position.z = -5.5; 
+        tail.position.y = 0.5;
+        tail.castShadow = true;
+        heliGroup.add(tail);
+
+        // 4. Kuyruk Pervanesi (Tail Rotor)
+        const tailRotorGeo = new THREE.BoxGeometry(0.1, 1.5, 0.05);
+        const tailRotorMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+        tailRotor = new THREE.Mesh(tailRotorGeo, tailRotorMat);
+        tailRotor.rotation.y = Math.PI / 2; 
+        tailRotor.position.set(0, 0.5, -8.5); 
+        tailRotor.receiveShadow = false;
+        tailRotor.castShadow = false;
+        heliGroup.add(tailRotor);
+
+        // 5. Kırmızı Spot Işığı
+        // Yoğunluk 10, Uzaklık 80, açı Math.PI/8 (22.5 derece), yumuşaklık 0.5
+        const redSpotlight = new THREE.SpotLight(0xff0000, 10, 80, Math.PI / 8, 0.8, 0.5);
+        redSpotlight.position.set(0, 0, 0); // Helikopterin merkezine göre
+        redSpotlight.target.position.set(0, -30, 0); // Başlangıçta aşağı baksın
+        redSpotlight.castShadow = false; // Helikopter ışığı gölge yapmasın
+        
+        // Spot ışığının hedef objesini sahneye eklemeliyiz
+        scene.add(redSpotlight.target);
+        
+        // Işığı helikopter grubuna ekle
+        heliGroup.add(redSpotlight);
+        
+        // Global değişkenlere ata
+        helicopter = heliGroup;
+        spotlight = redSpotlight;
+        
+        // Başlangıç Pozisyonu (Oyuncunun gerisinde, yüksekte)
+        helicopter.position.set(0, 35, -20);
+        
+        scene.add(helicopter);
+    }
+    
+    /**
+     * Yol kenar kaldırımlarını oluşturur.
+     */
+    function createKerbs() {
+        const size = YOL_BOYUTU * 2;
+        const kerbGeometry = new THREE.BoxGeometry(1.5, 0.5, size); 
+        const kerbMaterial = new THREE.MeshPhongMaterial({ color: 0x94a3b8 }); 
+        const roadCenterOffset = (ROAD_WIDTH / 2) + (1.5 / 2); 
+
+        // Sol Kaldırım (X = -6.75)
+        kerbLeft = new THREE.Mesh(kerbGeometry, kerbMaterial);
+        kerbLeft.position.set(-roadCenterOffset, 0, 0); 
+        kerbLeft.receiveShadow = true;
+
+        // Sağ Kaldırım (X = 6.75)
+        kerbRight = new THREE.Mesh(kerbGeometry, kerbMaterial);
+        kerbRight.position.set(roadCenterOffset, 0, 0);
+        kerbRight.receiveShadow = true;
+    }
+
+    /**
+     * Engel küplerini rastgele pozisyonlara yerleştirir.
+     */
+    function createObstacles() {
+        const obstacleGeometry = new THREE.BoxGeometry(2, 1.5, 2);
+        const obstacleMaterial = new THREE.MeshPhongMaterial({ color: 0x555555, flatShading: true }); 
+        
+        for (let i = 0; i < 30; i++) {
+            const obs = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
+            
+            let x, z;
+            let minDistance = 15; 
+
+            do {
+                // Yolun dışına engel koy
+                x = (Math.random() * (YOL_BOYUTU * 2 - 10)) - (YOL_BOYUTU - 5);
+                z = (Math.random() * (YOL_BOYUTU * 2 - 10)) - (YOL_BOYUTU - 5);
+            } while (Math.sqrt(x*x + z*z) < minDistance);
+
+            obs.position.set(x, 0.25, z); 
+            obs.userData.isObstacle = true; 
+            obs.castShadow = true;
+            obstacles.push(obs);
+        }
+    }
+
+    /**
+     * Rastgele boyutlarda gökdelen benzeri şehir binaları ekler.
+     */
+    function createCityBuildings() {
+        const buildingMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xb0c4de,
+            specular: 0xffffff, 
+            shininess: 100 
+        });
+        
+        const numBuildings = 120;
+        const sinir = YOL_BOYUTU - 5;
+        const roadBoundary = 7.5; 
+
+        for (let i = 0; i < numBuildings; i++) {
+            const building = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), buildingMaterial);
+            
+            const buildingWidth = 3 + Math.random() * 8;
+            const buildingDepth = 3 + Math.random() * 8;
+            const buildingHeight = 15 + Math.random() * 60; 
+
+            building.scale.set(buildingWidth, buildingHeight, buildingDepth);
+            building.position.y = (buildingHeight / 2) - 0.5;
+
+            let x, z;
+            
+            // Binaları yolun dışına yerleştir
+            if (Math.random() < 0.5) {
+                x = (Math.random() < 0.5 ? -1 : 1) * (roadBoundary + Math.random() * (sinir - roadBoundary));
+                z = (Math.random() * YOL_BOYUTU * 2) - YOL_BOYUTU;
+            } else {
+                x = (Math.random() * YOL_BOYUTU * 2) - YOL_BOYUTU;
+                z = (Math.random() < 0.5 ? -1 : 1) * (roadBoundary + Math.random() * (sinir - roadBoundary));
+            }
+            
+            building.position.x = x;
+            building.position.z = z;
+            building.receiveShadow = true;
+
+            environmentDetails.push(building);
+        }
+    }
+
+    /**
+     * Zemin ve yol desenini oluşturur.
+     */
+    function createGround() {
+        const size = YOL_BOYUTU * 2;
+        const groundGeometry = new THREE.PlaneGeometry(size, size, 1, 1); 
+        
+        const groundMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0x374151,
+            specular: 0x555555, 
+            shininess: 10
+        });
+        
+        const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+        groundMesh.rotation.x = -Math.PI / 2;
+        groundMesh.position.y = -0.5;
+        groundMesh.receiveShadow = true;
+
+        // Yol İşaretleri 
+        const lineGeometry = new THREE.BoxGeometry(0.1, 0.01, 2);
+        const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); 
+        
+        for(let i = -YOL_BOYUTU; i < YOL_BOYUTU; i += 5) {
+            const line = new THREE.Mesh(lineGeometry, lineMaterial);
+            line.position.set(0, 0.01, i); 
+            groundMesh.add(line);
+        }
+
+        return groundMesh;
+    }
+
+    // Egzoz Dumanı Fonksiyonları
+    function createSmokeMeshes() {
+        const smokeMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xcccccc,
+            transparent: true, 
+            opacity: 0.6,
+            depthWrite: false
+        });
+        const smokeGeometry = new THREE.SphereGeometry(0.3, 8, 8); 
+
+        for (let i = 0; i < NUM_SMOKE_MESHS; i++) {
+            const mesh = new THREE.Mesh(smokeGeometry, smokeMaterial.clone());
+            mesh.userData.life = 0; 
+            mesh.userData.maxLife = 100; 
+            mesh.position.y = -1000; 
+            scene.add(mesh);
+            smokeMeshes.push(mesh);
+        }
+    }
+    function emitSmoke() {
+        // Sadece ileri giderken ve gaza basarken duman çıkar
+        if (Oyun.yonTusuBasili.up && Oyun.hiz > 0.05 && Math.random() < 0.4) { 
+            const mesh = smokeMeshes.find(m => m.userData.life <= 0);
+            if (!mesh) return;
+            
+            // Egzoz konumu (arabın arkası)
+            const basePosition = car.position.clone();
+            basePosition.x -= Math.sin(Oyun.aci) * 2.2;
+            basePosition.z -= Math.cos(Oyun.aci) * 2.2;
+
+            mesh.position.set(
+                basePosition.x + (Math.random() - 0.5) * 0.2,
+                basePosition.y + 0.3, 
+                basePosition.z + (Math.random() - 0.5) * 0.2
+            );
+            
+            mesh.userData.life = mesh.userData.maxLife;
+            mesh.userData.velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.015,
+                0.005,
+                (Math.random() - 0.5) * 0.015
+            );
+            mesh.material.opacity = 0.6;
+            mesh.scale.set(1, 1, 1);
+        }
+    }
+    function updateSmokeMeshes() {
+        for (const mesh of smokeMeshes) {
+            if (mesh.userData.life > 0) {
+                mesh.position.add(mesh.userData.velocity);
+                mesh.userData.life--;
+                mesh.material.opacity = (mesh.userData.life / mesh.userData.maxLife) * 0.6;
+                mesh.scale.multiplyScalar(0.99);
+
+                if (mesh.userData.life <= 0) {
+                    mesh.position.y = -1000;
+                    mesh.scale.set(1, 1, 1);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Ekran boyutu değiştiğinde kamera ve renderer ayarlarını günceller.
+     */
+    function boyutAyarlayıcı() {
+        if (!renderer || !camera || !canvas) return;
+        
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        renderer.setSize(width, height);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+    }
+    
+    // =======================================================================
+    // ÇARPIŞMA, POLİS VE HELİKOPTER MANTIĞI
+    // =======================================================================
+
+    /**
+     * Oyuncu arabasının sabit engellerle çarpışmasını kontrol eder.
+     */
+    function checkObstacleCollision(newX, newZ) {
+        for (const obs of obstacles) {
+            const dx = newX - obs.position.x;
+            const dz = newZ - obs.position.z;
+            const distance = Math.sqrt(dx * dx + dz * dz);
+
+            const minDistance = CAR_RADIUS + 1.5; 
+
+            if (distance < minDistance) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /**
+     * Oyuncu arabasının polis arabası ile çarpışmasını kontrol eder.
+     * @returns {number} Polis arabasına olan mesafeyi döndürür. Çarpışma varsa 0'a yakın bir değer döner.
+     */
+    function checkPoliceCollision(playerX, playerZ) {
+        if (!policeCar) return 1000; 
+        
+        const dx = playerX - policeCar.position.x;
+        const dz = playerZ - policeCar.position.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+        
+        return distance;
+    }
+
+    function showCollisionMessage(show) {
+        collisionMessage.style.display = show ? 'block' : 'none';
+    }
+
+    /**
+     * Polis arabası lambalarının yanıp sönme efektini günceller.
+     */
+    function updatePoliceLights(deltaTime) {
+        if (!policeCar || !policeCar.userData.lights) return;
+
+        lightTimer += deltaTime;
+        const flashRate = 300; 
+
+        // Tek/Çift flaş mantığı
+        const isRedOn = (Math.floor(lightTimer / flashRate) % 2) === 0;
+        const isBlueOn = !isRedOn;
+
+        for (const light of policeCar.userData.lights) {
+            if (light.userData.color === 'red') {
+                light.material.color.set(isRedOn ? 0xff0000 : 0x440000); 
+            } else if (light.userData.color === 'blue') {
+                light.material.color.set(isBlueOn ? 0x0000ff : 0x000044); 
+            }
+        }
+        
+        // Zamanlayıcıyı sıfırla
+        if (lightTimer > flashRate * 2) {
+            lightTimer = 0;
+        }
+    }
+
+    /**
+     * Polis arabasının yapay zekasını (takip mekaniği) günceller.
+     */
+    function updatePoliceCar(deltaTime) {
+        if (!policeCar) return 1000;
+
+        // 1. Oyuncuya olan yönü ve mesafeyi hesapla
+        const dx = car.position.x - policeCar.position.x;
+        const dz = car.position.z - policeCar.position.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+        
+        const targetAngle = Math.atan2(dx, dz); 
+        
+        // Polisin hedefe doğru hareket etmesi için 180 derece (Math.PI) ters yöne dönmesi gerekir.
+        let adjustedTargetAngle = targetAngle + Math.PI; 
+        
+        let currentAngle = policeCar.rotation.y; 
+        
+        // 2. Dönüş Açısını Hesapla (açı farkını normalize et)
+        while (adjustedTargetAngle - currentAngle > Math.PI) currentAngle += 2 * Math.PI;
+        while (adjustedTargetAngle - currentAngle < -Math.PI) currentAngle -= 2 * Math.PI;
+
+        const angleDifference = adjustedTargetAngle - currentAngle;
+        
+        // Yumuşak dönüş
+        const turnSpeed = Math.min(Math.abs(angleDifference), policeCar.userData.turnRate) * Math.sign(angleDifference);
+        policeCar.rotation.y += turnSpeed;
+        
+        // 3. Hızlanma/Fren
+        const targetSpeed = distance > 8 ? policeCar.userData.maxChaseSpeed : 0.4; // 8 metreden yakında yavaşla
+        
+        if (policeCar.userData.speed < targetSpeed) {
+            policeCar.userData.speed += policeCar.userData.acceleration * (deltaTime / 16.66);
+        } else if (policeCar.userData.speed > targetSpeed) {
+            policeCar.userData.speed -= policeCar.userData.acceleration * 0.5 * (deltaTime / 16.66);
+        }
+        
+        // Sürtünme ve Maksimum Hız Limitleri
+        policeCar.userData.speed *= 0.995;
+        policeCar.userData.speed = Math.max(0, Math.min(policeCar.userData.maxChaseSpeed, policeCar.userData.speed));
+
+
+        // 4. İlerleme (Oyuncu ile aynı çıkarma konvansiyonu kullanılır)
+        const policeSpeed = policeCar.userData.speed * (deltaTime / 16.66);
+        const currentRotation = policeCar.rotation.y; 
+        
+        // Polisin hareket yönü: Kendi döndüğü yönde İLERİ gitmek için (çıkarma)
+        const newX = policeCar.position.x - Math.sin(currentRotation) * policeSpeed; 
+        const newZ = policeCar.position.z - Math.cos(currentRotation) * policeSpeed;
+        
+        policeCar.position.x = newX;
+        policeCar.position.z = newZ;
+        
+        // Polis lambalarını güncelle
+        updatePoliceLights(deltaTime);
+        
+        // Siren sesini güncelle
+        updateSiren(distance);
+        
+        return distance;
+    }
+    
+    /**
+     * Helikopterin pozisyonunu, pervanesini ve spot ışığını günceller.
+     */
+    function updateHelicopter(deltaTime) {
+        if (!helicopter) return;
+        
+        const targetY = 35; // Sabit helikopter irtifası
+        const lerpFactor = 0.015; // Yumuşak takip 
+        const frameRateFactor = deltaTime / 16.66; // Kare hızı normalizasyonu
+
+        // Helikopterin aracı takip edeceği hedef pozisyon
+        const targetX = car.position.x;
+        const targetZ = car.position.z;
+
+        // Pozisyonu yumuşakça hedefe doğru kaydır
+        helicopter.position.x += (targetX - helicopter.position.x) * lerpFactor * frameRateFactor;
+        helicopter.position.y += (targetY - helicopter.position.y) * lerpFactor * frameRateFactor;
+        helicopter.position.z += (targetZ - helicopter.position.z) * lerpFactor * frameRateFactor;
+
+        // Helikopterin daima arabaya doğru bakmasını sağla
+        helicopter.lookAt(car.position.x, car.position.y + 1, car.position.z);
+        
+        // Spot Işığını güncelle
+        if (spotlight) {
+            // Işık pozisyonu her zaman helikopterin pozisyonudur
+            spotlight.position.copy(helicopter.position); 
+            // Işık hedefi her zaman arabanın pozisyonudur
+            spotlight.target.position.copy(car.position); 
+            // Hedef pozisyonu güncelle
+            spotlight.target.updateWorldMatrix(true, true);
+        }
+        
+        // Pervaneyi döndür
+        rotorSpeed += 0.5 * frameRateFactor; 
+        if (mainRotor) mainRotor.rotation.y = rotorSpeed;
+        if (tailRotor) tailRotor.rotation.x = rotorSpeed;
+    }
+
+
+    // Klavye ve Mobil Kontroller
+    function klavyeBasildi(event) {
+        switch (event.key) {
+            case 'w': case 'W': case 'ArrowUp': Oyun.yonTusuBasili.up = true; break;
+            case 's': case 'S': case 'ArrowDown': Oyun.yonTusuBasili.down = true; break;
+            case 'a': case 'A': case 'ArrowLeft': Oyun.yonTusuBasili.left = true; break;
+            case 'd': case 'D': case 'ArrowRight': Oyun.yonTusuBasili.right = true; break;
+        }
+    }
+    function klavyeBirakildi(event) {
+        switch (event.key) {
+            case 'w': case 'W': case 'ArrowUp': Oyun.yonTusuBasili.up = false; break;
+            case 's': case 'S': case 'ArrowDown': Oyun.yonTusuBasili.down = false; break;
+            case 'a': case 'A': Oyun.yonTusuBasili.left = false; break;
+            case 'd': case 'D': Oyun.yonTusuBasili.right = false; break;
+        }
+    }
+    window.addEventListener('keydown', klavyeBasildi);
+    window.addEventListener('keyup', klavyeBirakildi);
+
+    const controlButtons = [
+        { id: 'btn-up', action: 'up' }, { id: 'btn-down', action: 'down' },
+        { id: 'btn-left', action: 'left' }, { id: 'btn-right', action: 'right' }
+    ];
+    controlButtons.forEach(btn => {
+        const element = document.getElementById(btn.id);
+        const startHandler = () => { 
+            Oyun.yonTusuBasili[btn.action] = true; 
+            if (isAudioInitialized && backgroundMusic && backgroundMusic.mute) { 
+                backgroundMusic.mute = false; 
+            }
+            if (!motorRunning && isAudioInitialized && Math.abs(Oyun.hiz) < 0.005) { 
+                motorSynth.triggerAttack("C2"); motorRunning = true; 
+            }
+        };
+        const endHandler = () => { Oyun.yonTusuBasili[btn.action] = false; };
+        element.addEventListener('touchstart', startHandler);
+        element.addEventListener('touchend', endHandler);
+        element.addEventListener('mousedown', startHandler);
+        element.addEventListener('mouseup', endHandler);
+        element.addEventListener('mouseleave', endHandler); 
+        element.addEventListener('contextmenu', (e) => e.preventDefault()); 
+    });
+
+
+    // =======================================================================
+    // OYUN DÖNGÜSÜ
+    // =======================================================================
+
+    function oyunGuncelle(zaman) {
+        const deltaTime = zaman - Oyun.sonZaman;
+        Oyun.sonZaman = zaman;
+
+        const hizlanmaTusuBasili = Oyun.yonTusuBasili.up || Oyun.yonTusuBasili.down;
+
+        // Hız Güncelleme (Physics)
+        if (Oyun.yonTusuBasili.up) { Oyun.hiz += Oyun.ivme * (deltaTime / 16.66); } 
+        else if (Oyun.yonTusuBasili.down) {
+            if (Oyun.hiz > 0) { Oyun.hiz -= Oyun.frenGucu * (deltaTime / 16.66); } else { Oyun.hiz -= Oyun.ivme * 0.5 * (deltaTime / 16.66); }
+        }
+        Oyun.hiz = Math.max(Oyun.maksGeriHiz, Math.min(Oyun.maksHiz, Oyun.hiz));
+
+        // Sürtünme
+        if (!hizlanmaTusuBasili) {
+            if (Oyun.hiz > 0) { Oyun.hiz -= Oyun.surtunme * (deltaTime / 16.66); if (Oyun.hiz < 0) Oyun.hiz = 0; } 
+            else if (Oyun.hiz < 0) { Oyun.hiz += Oyun.surtunme * (deltaTime / 16.66); if (Oyun.hiz > 0) Oyun.hiz = 0; }
+        }
+        if (Math.abs(Oyun.hiz) < 0.001) { Oyun.hiz = 0; }
+
+        // Motor Sesi Güncelleme
+        if (isAudioInitialized) {
+            updateMotorSound(Oyun.hiz);
+        }
+
+        // Dönüş Güncelleme
+        const donusFaktoru = Math.abs(Oyun.hiz) * 5; 
+        const mevcutDonusHizi = Oyun.donusHizi * donusFaktoru * (deltaTime / 16.66);
+        
+        if (Math.abs(Oyun.hiz) > 0.005) { 
+            if (Oyun.yonTusuBasili.left) { Oyun.aci += Oyun.hiz > 0 ? mevcutDonusHizi : -mevcutDonusHizi; }
+            if (Oyun.yonTusuBasili.right) { Oyun.aci -= Oyun.hiz > 0 ? mevcutDonusHizi : -mevcutDonusHizi; }
+        }
+
+        // Yeni pozisyon hesaplama
+        const yeniX = car.position.x - Math.sin(Oyun.aci) * Oyun.hiz * (deltaTime / 16.66);
+        const yeniZ = car.position.z - Math.cos(Oyun.aci) * Oyun.hiz * (deltaTime / 16.66);
+        
+        // Mesafe Hesaplama
+        const traveledDistance = Math.abs(Oyun.hiz) * (deltaTime / 16.66);
+        totalDistance += traveledDistance;
+        
+        let hasCollided = false;
+        
+        // Polis arabasını güncelle ve mesafeyi al
+        const policeDistance = updatePoliceCar(deltaTime);
+
+        // Helikopteri güncelle (takip ve pervane)
+        updateHelicopter(deltaTime);
+
+        // Çarpışma Kontrolü (Sabit Engeller)
+        if (checkObstacleCollision(yeniX, yeniZ)) {
+            Oyun.hiz = 0;
+            hasCollided = true;
+            if(motorRunning) { motorSynth.triggerRelease(); motorRunning = false; }
+            playCollisionSound();
+        } 
+        
+        // Çarpışma Kontrolü (Polis Arabası)
+        const MIN_POLICE_DISTANCE = 3.5;
+        if (policeDistance < MIN_POLICE_DISTANCE) {
+            Oyun.hiz = 0;
+            hasCollided = true;
+            if(motorRunning) { motorSynth.triggerRelease(); motorRunning = false; }
+            playCollisionSound();
+        }
+        
+        // Pozisyonu Güncelle
+        car.position.x = yeniX;
+        car.position.z = yeniZ;
+        
+        // Egzoz Dumanı Güncelleme ve Yayma
+        emitSmoke();
+        updateSmokeMeshes();
+
+        // Çarpışma mesajını göster/gizle
+        showCollisionMessage(hasCollided && hizlanmaTusuBasili);
+
+        // Araba görünümünü güncelle
+        car.rotation.y = Oyun.aci;
+
+        // KAMERA TAKİBİ GÜNCELLEMESİ (Yeni Sinematik Açı)
+        const { distance, height, lookAheadFactor } = CameraParams;
+        
+        // Kameranın arabanın gerisinde ve üstünde olduğu pozisyon
+        const camX = car.position.x + Math.sin(Oyun.aci) * distance;
+        const camZ = car.position.z + Math.cos(Oyun.aci) * distance;
+        
+        // Kameranın baktığı hedef pozisyon (arabanın biraz önü)
+        const targetX = car.position.x - Math.sin(Oyun.aci) * lookAheadFactor;
+        const targetZ = car.position.z - Math.cos(Oyun.aci) * lookAheadFactor;
+        
+        camera.position.set(camX, car.position.y + height, camZ);
+        camera.lookAt(new THREE.Vector3(targetX, car.position.y + 1.0, targetZ));
+
+
+        // Zemin ve Kaldırım Takibi (Sınırsız hissi verir)
+        ground.position.x = car.position.x;
+        ground.position.z = car.position.z;
+        
+        kerbLeft.position.x = car.position.x - 6.75;
+        kerbLeft.position.z = car.position.z;
+
+        kerbRight.position.x = car.position.x + 6.75;
+        kerbRight.position.z = car.position.z;
+
+
+        // Hız ve Mesafe Bilgisini Güncelle
+        const kmh = (Math.abs(Oyun.hiz) * 550).toFixed(1); 
+        const distanceKm = (totalDistance * 0.005).toFixed(2); 
+        infoDisplay.innerHTML = `Hız: ${kmh} km/s <br> Mesafe: ${distanceKm} km <br> Polis: <span id="police-distance">${document.getElementById('police-distance').textContent}</span>`;
+    }
+
+
+    // Animasyon Döngüsü
+    function animate(zaman) {
+        requestAnimationFrame(animate);
+        if (document.getElementById('start-audio-btn').style.display !== 'block') {
+            oyunGuncelle(zaman);
+        }
+        renderer.render(scene, camera);
+    }
+
+    // =======================================================================
+    // BAŞLANGIÇ
+    // =======================================================================
+    
+    document.getElementById('start-audio-btn').addEventListener('click', () => {
+        Tone.start().then(() => {
+            document.getElementById('start-audio-btn').style.display = 'none';
+            setupAudio();
+            Tone.Transport.start(); 
+            
+            // Başladıktan sonra müziğin sesini aç
+            if (backgroundMusic) { backgroundMusic.mute = false; }
+
+            if (motorSynth) { motorSynth.triggerAttack("C2"); motorRunning = true; }
+        }).catch(err => {
+            console.error("Ses başlatılamadı:", err);
+            document.getElementById('start-audio-btn').textContent = "SES BAŞLATILAMADI (Hata)";
+            document.getElementById('start-audio-btn').disabled = true;
+        });
+    });
+
+    window.onload = function () {
+        sahneyiKur();
+        document.getElementById('start-audio-btn').style.display = 'block';
+        animate(performance.now());
+    }
+</script>
+
+</body>
+</html>
